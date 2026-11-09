@@ -7,7 +7,10 @@ const YEARS=DATA.years,NOW_IDX=YEARS.indexOf(2026),LAST=YEARS.length-1;
 const C=DATA.countries,WD=DATA.world,WORLD=WD.pop,WGR=WD.gr;
 const KEYS=Object.keys(C).sort((a,b)=>C[b].pop[NOW_IDX]-C[a].pop[NOW_IDX]);
 const BIG3=["india","china","united-states"];
-const FLAGURI={};Object.entries(FLAGS).forEach(([k,v])=>FLAGURI[k]=v.startsWith("data:")||v.startsWith("/")?v:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(v));
+const DEPTH=window.ORBIS_DEPTH||0,SITE=!!window.ORBIS_SITE&&location.protocol!=="file:";
+const ROOT=(()=>{if(!SITE||window.ORBIS_DEPTH===undefined)return "/";const s=location.pathname.replace(/index\.html$/,"").split("/").filter(Boolean);const p=s.slice(0,Math.max(0,s.length-DEPTH));return "/"+(p.length?p.join("/")+"/":"")})();
+const ASSETS=!window.ORBIS_SITE?"":SITE?ROOT:("../".repeat(DEPTH)||"./");
+const FLAGURI={};Object.entries(FLAGS).forEach(([k,v])=>FLAGURI[k]=v.startsWith("assets/")?ASSETS+v:v.startsWith("data:")||v.startsWith("/")?v:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(v));
 KEYS.forEach((k,i)=>{const c=C[k];c.rank=i+1;c.code=c.cca2.toLowerCase();c.density=Math.round(c.pop[NOW_IDX]/c.land)});
 // Worldometer urban-area lists for the original three pages
 C.india.cities=[["New Delhi",30222405],["Kolkata",22549738],["Mumbai",20203056],["Bengaluru",13187098],["Chennai",11153205],["Hajipur",9941510],["Hyderabad",9190795],["Ahmedabad",7632408],["Surat",6908925],["Pune",6817951]];
@@ -81,7 +84,9 @@ const RATES={births:WD.births,deaths:WD.deaths,growth:WD.births-WD.deaths,co2:wm
 const STOCK={inet:wm("it.net.user.zs")/100,under:wm("sn.itk.defc.zs")/100};
 function liveVal(key){const t=Date.now();
  if(key==="world")return WORLD[NOW_IDX]+WORLD_CHANGE*(t-T0)/YR;
- if(C[key])return C[key].pop[NOW_IDX]+C[key].change*(t-T0)/YR;
+ if(C[key]){const c=C[key],y=(t-T0)/YR;return c.pop[NOW_IDX]+Math.floor(c.births*y)-Math.floor(c.deaths*y)+Math.round((c.change-c.births+c.deaths)*y)}
+ if(key.startsWith("c:")){const [,k,what,span]=key.split(":"),c=C[k];if(!c)return 0;const d=new Date(),start=span==="today"?new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime():new Date(d.getFullYear(),0,1).getTime();
+  const rate=what==="births"?c.births:what==="deaths"?c.deaths:what==="mig"?c.change-c.births+c.deaths:c.change,v=rate*(t-start)/YR;return v<0?Math.ceil(v):Math.floor(v)}
  const d=new Date(),y0=new Date(d.getFullYear(),0,1).getTime(),d0=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(),per=ms=>ms/YR;
  const [base,span]=key.split(":");
  if(RATES[base]!=null)return RATES[base]*per(t-(span==="today"?d0:y0));
@@ -609,13 +614,15 @@ function initCat(cat,f){const ks=selFor(f),X=COL.x,wk=SHOWW?["world"]:[];
 function catStrip(k,cur){return `<nav class="cstrip" aria-label="Categories">${CATS.map((x,i)=>{const col=catCol(i),on=x.id===cur;const href=k?`#${k}${x.id==="population"?"":"-"+x.id}`:`#cat-${x.id}`;
  return `<a class="cpill ${on?"on":""}" href="${href}" style="--cc:${col};${on?`color:${textOn(col)}`:""}"><i></i>${x.n}</a>`}).join("")}</nav>`}
 function renderSections(secs){const card=s=>s.raw?s.html.replace('<div class="card','<div id="s-'+s.id+'" class="card'):`<section class="card ${s.wide?"wide":""}" id="s-${s.id}"><div class="card-h"><div><h3>${s.t}</h3>${s.lead?`<p>${s.lead}</p>`:""}</div></div>${s.html}</section>`;
- return `<div class="lay"><nav class="side" aria-label="Sections">${secs.map(s=>`<button data-go="s-${s.id}">${s.t||({stripes:"Growth stripes",transition:"Demographic transition",bubble:"Demographic transition",share:"Who lives where",cmpc:"Compared over time"}[s.id]||s.id)}</button>`).join("")}</nav><div class="grid">${secs.map(card).join("")}</div></div>`}
+ return `<div class="lay"><div class="grid">${secs.map(card).join("")}</div></div>`}
 const srcNote=cat=>`<div class="src" style="margin-top:20px">${cat==="population"?"Source: UN World Population Prospects 2024 (medium variant), 1 July estimates. The live counter interpolates the 2025–26 change.":"Sources: World Bank World Development Indicators (latest year per country, shown under each figure), Ember and Global Carbon Project via Our World in Data, UN WPP 2024, IMF, CIA World Factbook. Years can differ between countries."}</div>`;
 function pageCountry(k,cat){CUR_F=k;const c=C[k],ci=CATS.findIndex(x=>x.id===cat);
  const head=`<div class="c-head">${flag(k,80)}<div><div class="crumb"><a href="#countries">Countries</a> / ${esc(c.region)} / ${esc(c.subregion||"")}${cat!=="population"?` / ${CATS[ci].n}`:""}</div><h1 style="color:${COL[k]}">${esc(c.name)}</h1>
   <div class="chips" style="margin-top:8px"><span class="chip" style="cursor:default">#${c.rank} by population</span><span class="chip" style="cursor:default">Capital: ${esc(c.capital)}</span><a class="chip" href="#compare" data-cmpwith="${k}">⇄ Compare</a></div></div>
   <div class="c-live"><span class="label"><span class="live-dot"></span>Population · live</span><div class="bignum mono" data-live="${k}"></div></div></div>`;
- return head+catStrip(k,cat)+(cat!=="population"?`<div class="sec-title" style="margin-top:0"><h2 style="color:${catCol(ci)}">${CATS[ci].n}</h2><p>${CATS[ci].d}. <a href="#cat-${cat}">See the world ranking →</a></p></div>`:"")+selBar(k)+renderSections(catSections(cat,k))+srcNote(cat)}
+ const T=(l,w,cls="")=>`<div><span class="label">${l} today</span><span class="mono ${cls}" data-live="c:${k}:${w}:today"></span><small>this year: <span data-live="c:${k}:${w}:year"></span></small></div>`;
+ const today=`<div class="c-today">${T("Births","births","pos")}${T("Deaths","deaths","neg")}${T("Net migration","mig")}${T("Population change","net",c.change<0?"neg":"pos")}</div>`;
+ return head+today+catStrip(k,cat)+(cat!=="population"?`<div class="sec-title" style="margin-top:0"><h2 style="color:${catCol(ci)}">${CATS[ci].n}</h2><p>${CATS[ci].d}. <a href="#cat-${cat}">See the world ranking →</a></p></div>`:"")+selBar(k)+renderSections(catSections(cat,k))+srcNote(cat)}
 function pageCat(id){CUR_F=null;const i=CATS.findIndex(x=>x.id===id);const c=CATS[i];if(!c)return pageHome();const col=catCol(i);
  return `<div class="crumb"><a href="#categories">Categories</a> / ${c.n}</div><div class="cat-head"><div><h1 style="color:${col}">${c.n}</h1><p class="muted" style="margin:6px 0 0">${c.d}, for ${KEYS.length} countries.</p></div></div>
  ${catStrip(null,id)}${selBar(null)}${renderSections(catSections(id,null))}${srcNote(id)}`}
@@ -746,14 +753,64 @@ function pageAbout(){CUR_F=null;return `<div class="cat-head"><div><h1>About Omn
   <h3 style="margin-top:18px">Privacy</h3><p style="font-size:.92rem;margin:8px 0 0">Omni uses no cookies, no analytics and no third-party trackers. Your theme and comparison choices are stored only in your own browser.</p></section></div>`}
 function pageCategories(){CUR_F=null;return `<div class="sec-title" style="margin-top:0"><h1 style="font-size:2.2rem">All categories</h1><p>Each category has world rankings for all ${KEYS.length} countries and a section on every country page.</p></div>${catGrid()}`}
 
+/* ---------- sidebar ---------- */
+const LS={get:(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v??d}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let RECENT=LS.get("omni-recent",[]).filter(k=>C[k]),SAVED=LS.get("omni-saved",[]).filter(k=>C[k]);
+function pushRecent(k){RECENT=[k,...RECENT.filter(x=>x!==k)].slice(0,8);LS.set("omni-recent",RECENT)}
+function toggleSaved(k){SAVED=SAVED.includes(k)?SAVED.filter(x=>x!==k):[k,...SAVED].slice(0,20);LS.set("omni-saved",SAVED)}
+const chipsOf=ks=>`<div class="sp-chips">${ks.map(k=>`<a href="#${k}">${flag(k,18)}${esc(C[k].name)}</a>`).join("")}</div>`;
+function tocItems(){const app=$("#app"),out=[];let n=0;
+ app.querySelectorAll('.sec-title h2, [id^="s-"], .cmp-out > section').forEach(el=>{let target=el,label="";
+  if(el.matches(".sec-title h2")){target=el.closest(".sec-title");label=el.textContent}
+  else{const h=el.querySelector("h2,h3");label=h?h.textContent:""}
+  if(!label.trim())return;if(!target.id)target.id="toc-"+(n++);out.push([target.id,label.trim()])});return out}
+function renderSide(h,cm){const side=$("#side");if(!side)return;const k=cm&&cm.k,cat=cm?cm.cat:(h.startsWith("cat-")?h.slice(4):null);
+ const sec=(t,body,extra="")=>`<section class="sp"><h4><span>${t}</span>${extra}</h4>${body}</section>`;
+ let html=`<button class="side-close" type="button" data-side-close>Close ✕</button><div class="search" data-search><input type="search" placeholder="Jump to any country…" autocomplete="off" aria-label="Jump to any country"><ul hidden></ul></div>`;
+ if(k){const c=C[k],saved=SAVED.includes(k),inCmp=CMP.keys.includes(k);
+  html+=`<div><a class="sp-country" href="#${k}">${flag(k,44)}<b>${esc(c.name)}</b><small>#${c.rank} · <span data-live="${k}"></span></small></a>
+   <div class="sp-actions"><button class="btn" type="button" data-save="${k}" aria-pressed="${saved}">${saved?"★ Saved":"☆ Save"}</button><button class="btn" type="button" data-cmpadd="${k}" ${inCmp?"disabled":""}>${inCmp?"✓ In compare":"⇄ Add to compare"}</button></div></div>`;
+  html+=sec(esc(c.name)+" by category",`<nav class="sp-list">${CATS.map((x,i)=>{const col=catCol(i),on=x.id===cat;return `<a href="#${k}${x.id==="population"?"":"-"+x.id}" class="${on?"on":""}" style="--cc:${col};${on?`color:${textOn(col)}`:""}"><i></i>${x.n}</a>`}).join("")}</nav>`)}
+ else if(cat||h==="categories"){html+=sec("Rankings by category",`<nav class="sp-list">${CATS.map((x,i)=>{const col=catCol(i),on=x.id===cat;return `<a href="#cat-${x.id}" class="${on?"on":""}" style="--cc:${col};${on?`color:${textOn(col)}`:""}"><i></i>${x.n}</a>`}).join("")}</nav>`)}
+ html+=`<div id="sp-toc-wrap"></div>`;
+ const cmpReal=CMP.keys.filter(x=>C[x]);
+ html+=sec("Compare",cmpReal.length?chipsOf(cmpReal)+`<div class="sp-actions"><a class="btn primary" href="#compare">Open comparison →</a></div>`:`<p class="sp-empty">No countries yet. Use “Add to compare” on any country page.</p>`,cmpReal.length?`<button type="button" data-cmpclear>Clear</button>`:"");
+ html+=sec("Saved countries",SAVED.length?chipsOf(SAVED):`<p class="sp-empty">Tap ☆ Save on a country to keep it here.</p>`);
+ const rec=RECENT.filter(x=>x!==k).slice(0,6);if(rec.length)html+=sec("Recently viewed",chipsOf(rec));
+ if(!k&&!cat)html+=sec("Most populous",chipsOf(KEYS.slice(0,8)));
+ html+=sec("Go to",`<div class="sp-links"><a href="#home">Live</a><a href="#countries">Countries</a><a href="#categories">Rankings</a><a href="#compare">Compare</a><a href="#about">Sources</a><a href="#${KEYS[Math.floor(Math.random()*KEYS.length)]}">Random country</a></div>`);
+ side.innerHTML=html}
+function startSpy(){const wrap=$("#sp-toc-wrap");if(!wrap)return;const items=tocItems();
+ if(items.length<2){wrap.innerHTML="";return}
+ wrap.innerHTML=`<section class="sp"><h4><span>On this page</span><button type="button" data-top>Top ↑</button></h4><nav class="sp-list sp-toc">${items.map(([id,l])=>`<button type="button" data-toc="${id}">${esc(l)}</button>`).join("")}</nav></section>`;
+ if(!("IntersectionObserver" in window))return;const btns=[...wrap.querySelectorAll("[data-toc]")];
+ const vis=new Map();const io=new IntersectionObserver(es=>{es.forEach(e=>vis.set(e.target.id,e.isIntersecting?e.boundingClientRect.top:null));
+  let best=null,bt=1e9;items.forEach(([id])=>{const t=vis.get(id);if(t!=null&&t<bt){bt=t;best=id}});if(best)btns.forEach(b=>b.classList.toggle("on",b.dataset.toc===best))},{rootMargin:"-90px 0px -55% 0px"});
+ items.forEach(([id])=>{const el=document.getElementById(id);if(el)io.observe(el)});timers.push(()=>io.disconnect())}
+(function ensureShell(){if($("#side"))return;const m=$("#app");if(!m)return;const sh=document.createElement("div");sh.className="wrap shell";m.parentNode.insertBefore(sh,m);m.classList.remove("wrap");sh.appendChild(m);
+ const as=document.createElement("aside");as.id="side";as.className="side-panel";as.setAttribute("aria-label","Quick navigation");sh.appendChild(as);
+ document.body.insertAdjacentHTML("beforeend",'<button class="side-fab" id="side-fab" type="button" aria-controls="side" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Menu</button><div class="side-backdrop" id="side-backdrop" hidden></div>')})();
+function openSide(){document.body.classList.add("side-open");$("#side-backdrop").hidden=false;$("#side-fab").setAttribute("aria-expanded","true")}
+function closeSide(){document.body.classList.remove("side-open");const b=$("#side-backdrop");if(b)b.hidden=true;const f=$("#side-fab");if(f)f.setAttribute("aria-expanded","false")}
+$("#side-fab").addEventListener("click",openSide);$("#side-backdrop").addEventListener("click",closeSide);
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeSide()});
+document.addEventListener("click",e=>{const t=e.target.closest("[data-save],[data-cmpadd],[data-cmpclear],[data-toc],[data-top],[data-side-close],#side a[href]");if(!t)return;
+ if(t.dataset.save){toggleSaved(t.dataset.save);const cm=parse(getTok());renderSide(getTok(),cm);if(SITE)fixLinks($("#side"));document.querySelectorAll("#side [data-live]").forEach(paintCounter);bindSearch($("#side [data-search]"));startSpy();return}
+ if(t.dataset.cmpadd){if(!CMP.keys.includes(t.dataset.cmpadd))CMP.keys=[...CMP.keys,t.dataset.cmpadd].slice(-8);saveCmp();renderSide(getTok(),parse(getTok()));if(SITE)fixLinks($("#side"));document.querySelectorAll("#side [data-live]").forEach(paintCounter);bindSearch($("#side [data-search]"));startSpy();toast("Added to compare");return}
+ if(t.dataset.cmpclear!==undefined&&t.hasAttribute("data-cmpclear")){CMP.keys=[];saveCmp();renderSide(getTok(),parse(getTok()));if(SITE)fixLinks($("#side"));bindSearch($("#side [data-search]"));startSpy();return}
+ if(t.dataset.toc){const el=document.getElementById(t.dataset.toc);if(el)el.scrollIntoView({behavior:"smooth",block:"start"});closeSide();return}
+ if(t.hasAttribute("data-top")){window.scrollTo({top:0,behavior:"smooth"});closeSide();return}
+ if(t.hasAttribute("data-side-close")){closeSide();return}
+ if(t.matches("#side a[href]"))closeSide()});
+
 /* ---------- router ---------- */
-const SITE=!!window.ORBIS_SITE,STATIC_TITLE=SITE?document.title:"";
-function tokenToPath(t){if(!t||t==="home")return "/";if(["countries","categories","compare","about"].includes(t))return `/${t}/`;if(t.startsWith("cat-"))return `/rankings/${t.slice(4)}/`;const p=parse(t);if(p)return p.cat==="population"?`/${p.k}/`:`/${p.k}/${p.cat}/`;return "/"}
-function pathToToken(path){const a=path.replace(/index\.html$/,"").split("/").filter(Boolean);if(!a.length)return "home";if(a[0]==="rankings"&&a[1])return "cat-"+a[1];if(a.length===1)return a[0];return a[0]+"-"+a[1]}
-function getTok(){return SITE?pathToToken(location.pathname):(location.hash.slice(1)||"home")}
+const STATIC_TITLE=window.ORBIS_SITE?document.title:"";
+function tokenToPath(t){const r=ROOT;if(!t||t==="home")return r;if(["countries","categories","compare","about"].includes(t))return `${r}${t}/`;if(t.startsWith("cat-"))return `${r}rankings/${t.slice(4)}/`;const p=parse(t);if(p)return p.cat==="population"?`${r}${p.k}/`:`${r}${p.k}/${p.cat}/`;return r}
+function pathToToken(path){if(path.startsWith(ROOT))path="/"+path.slice(ROOT.length);const a=path.replace(/index\.html$/,"").split("/").filter(Boolean);if(!a.length)return "home";if(a[0]==="rankings"&&a[1])return "cat-"+a[1];if(a.length===1)return a[0];return a[0]+"-"+a[1]}
+function getTok(){return SITE?pathToToken(location.pathname):(location.hash.slice(1)||window.ORBIS_TOKEN||"home")}
 function go(t){if(SITE){history.pushState(null,"",tokenToPath(t));route(false)}else location.hash=t}
 function fixLinks(scope){scope.querySelectorAll('a[href^="#"]').forEach(a=>{const t=a.getAttribute("href").slice(1);if(t)a.setAttribute("href",tokenToPath(t))})}
-if(SITE)document.addEventListener("click",e=>{const a=e.target.closest("a[href]");if(!a||e.defaultPrevented||e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||a.target)return;const href=a.getAttribute("href");if(!href.startsWith("/")||href.startsWith("//"))return;e.preventDefault();go(pathToToken(href))});
+if(SITE)document.addEventListener("click",e=>{const a=e.target.closest("a[href]");if(!a||e.defaultPrevented||e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||a.target)return;const href=a.getAttribute("href");if(href.startsWith("#"))return;let u;try{u=new URL(a.href)}catch(x){return}if(u.origin!==location.origin||!u.pathname.startsWith(ROOT)||/\.(xml|txt|md|png|svg|zip)$/.test(u.pathname))return;e.preventDefault();go(pathToToken(u.pathname))});
 function parse(h){if(C[h])return {k:h,cat:"population"};const m=h.match(/^(.+)-([a-z]+)$/);if(m&&C[m[1]]&&CATS.some(x=>x.id===m[2]))return {k:m[1],cat:m[2]};return null}
 function route(keepScroll){
  const h=getTok();cleanup();applyTheme();G=null;const app=$("#app");let after=()=>{};
@@ -768,10 +825,11 @@ function route(keepScroll){
  else{app.innerHTML=pageHome();after=initHome;document.title="Omni"}
  if(SITE){fixLinks(document);if(!route.done&&STATIC_TITLE)document.title=STATIC_TITLE}route.done=1;
  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on",a.dataset.r===h||(a.dataset.r==="home"&&h==="home")||(a.dataset.r==="countries"&&!!cm)||(a.dataset.r==="categories"&&h.startsWith("cat-"))));
+ if(cm)pushRecent(cm.k);renderSide(h,cm);if(SITE)fixLinks($("#side"));closeSide();
  document.querySelectorAll("[data-live]").forEach(paintCounter);document.querySelectorAll("[data-search]").forEach(bindSearch);
  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>{const t=document.getElementById(b.dataset.go);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})}));
  if(window.Chart)after();else window.addEventListener("load",()=>{applyTheme();after()},{once:true});
- if(!keepScroll)window.scrollTo(0,0)}
+ if(!keepScroll)window.scrollTo(0,0);startSpy()}
 if(SITE)window.addEventListener("popstate",()=>route(false));else window.addEventListener("hashchange",()=>route(false));
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>route(true));
 new MutationObserver(()=>route(true)).observe(root,{attributes:true,attributeFilter:["data-theme"]});
